@@ -1,14 +1,10 @@
-package fr.manu.spark
+package fr.manu.starter.spark
 
-import fr.manu.starter.spark.WebServer
-import fr.manu.starter.spark.randomPort
 import io.restassured.RestAssured
-import org.hamcrest.Matchers.*
+import org.hamcrest.Matchers.`is`
 import org.junit.AfterClass
 import org.junit.BeforeClass
 import org.junit.Test
-import spark.Spark
-import java.io.IOException
 
 class ErrorHandlingTest {
     var baseUrl = server.baseUrl
@@ -16,7 +12,8 @@ class ErrorHandlingTest {
     companion object {
         lateinit var server: WebServer
         @BeforeClass @JvmStatic fun init() {
-            server = WebServer(randomPort());
+            server = WebServer(randomPort())
+            // TODO Clarifier Spark.halt vs <instance de service>.halt ???
             server.configure().get("/404", { request, response -> server.configure().halt(404) })
             server.configure().get("/409", { request, response -> server.configure().halt(409) })
             server.configure().get("/error", { request, response -> throw UnsupportedOperationException() })

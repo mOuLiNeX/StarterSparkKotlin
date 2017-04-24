@@ -1,13 +1,10 @@
-package fr.manu.spark
+package fr.manu.starter.spark
 
-import fr.manu.starter.spark.WebServer
-import fr.manu.starter.spark.randomPort
 import io.restassured.RestAssured
-import org.hamcrest.Matchers.*
+import org.hamcrest.Matchers.`is`
 import org.junit.AfterClass
 import org.junit.BeforeClass
 import org.junit.Test
-import spark.Spark
 
 class MultipleServersTest {
     var baseUrl = server.baseUrl
@@ -15,7 +12,7 @@ class MultipleServersTest {
     companion object {
         lateinit var server: WebServer
         @BeforeClass @JvmStatic fun init() {
-            server = WebServer(randomPort());
+            server = WebServer(randomPort())
             server.configure().get("/hello", { request, response -> "Hello World !" })
         }
 
