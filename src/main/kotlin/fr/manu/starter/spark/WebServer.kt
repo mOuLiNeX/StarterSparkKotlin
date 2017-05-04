@@ -3,7 +3,11 @@ package fr.manu.starter.spark
 import com.github.salomonbrys.kodein.Kodein
 import com.github.salomonbrys.kodein.instance
 import org.slf4j.LoggerFactory
-import spark.*
+import spark.Request
+import spark.Response
+import spark.RouteImpl
+import spark.Service
+import spark.route.HttpMethod
 import java.io.IOException
 import java.lang.reflect.Method
 import java.net.InetSocketAddress
@@ -44,46 +48,46 @@ class WebServer(port: Int = Service.SPARK_DEFAULT_PORT) {
         sparkServer.stop()
     }
 
-    fun resource(path: String, controller: ResourceController, override: Boolean = false) {
-        convertResourceToRoutes(path, controller, override)
+    fun resource(path: String, controller: ResourceController) {
+        convertResourceToRoutes(path, controller)
     }
 
-    fun <T : ResourceController> resource(path: String, controllerClass: KClass<T>, override: Boolean = false) {
+    fun <T : ResourceController> resource(path: String, controllerClass: KClass<T>) {
         if (depsContainer == null) {
             throw UnsupportedOperationException("Cannot bind controller per classe name without setting any dependency container into server")
         }
 
         try {
-            convertResourceToRoutes(path, controllerClass, override)
+            convertResourceToRoutes(path, controllerClass)
         } catch (e: IllegalStateException) {
             log.error("Skip Spark route resolution : {}", e.message)
         }
     }
 
-    private fun convertResourceToRoutes(path: String, controller: ResourceController, override: Boolean) {
+    private fun convertResourceToRoutes(path: String, controller: ResourceController) {
         for (classMethod in controller::class.java.declaredMethods) {
             val methodName = classMethod.name
 
             ResourceController::class.java.declaredMethods
                     .filter { interfaceMethod -> areEquals(classMethod, interfaceMethod, methodName) }
-                    .forEach { addRoute(methodName.toLowerCase(), path, controller, override) }
+                    .forEach { addRoute(methodName.toLowerCase(), path, controller) }
         }
     }
 
-    private fun <T : ResourceController> convertResourceToRoutes(path: String, controllerClass: KClass<T>, override: Boolean) {
+    private fun <T : ResourceController> convertResourceToRoutes(path: String, controllerClass: KClass<T>) {
         for (classMethod in controllerClass.java.declaredMethods) {
             val methodName = classMethod.name
 
             ResourceController::class.java.declaredMethods
                     .filter { interfaceMethod -> areEquals(classMethod, interfaceMethod, methodName) }
-                    .forEach { addRoute(methodName.toLowerCase(), path, controllerClass, override) }
+                    .forEach { addRoute(methodName.toLowerCase(), path, controllerClass) }
         }
     }
 
     private fun areEquals(classMethod: Method, interfaceMethod: Method, methodName: String?) =
             methodName == interfaceMethod.name && classMethod.returnType == interfaceMethod.returnType && Arrays.deepEquals(classMethod.parameterTypes, interfaceMethod.parameterTypes)
 
-    private fun addRoute(httpMethod: String, path: String, controller: ResourceController, override: Boolean) {
+    private fun addRoute(httpMethod: String, path: String, controller: ResourceController) {
         val method = ResourceController::class.java.getMethod(httpMethod, Request::class.java, Response::class.java)
 
         val sparkRoute = fun(request: Request, response: Response): Any {
@@ -93,18 +97,13 @@ class WebServer(port: Int = Service.SPARK_DEFAULT_PORT) {
             return response.body()
         }
 
-        if (override) {
-            log.info("Replace Spark route .{}(\"{}\", {...}) from controller {}", httpMethod, path, controller.javaClass.canonicalName)
-            // Obliger de passer par un hack (update non dispo)
-            updateRoute(sparkServer, httpMethod, path, sparkRoute)
+        val httpVerb = HttpMethod.get(httpMethod)
+        log.info("Declare Spark route {}(\"{}\", {...}) from controller {}", httpVerb, path, controller.javaClass.canonicalName)
+        sparkServer.addRoute(httpVerb, RouteImpl.create(path, sparkRoute))
 
-        } else {
-            log.info("Create Spark route .{}(\"{}\", {...}) from controller {}", httpMethod, path, controller.javaClass.canonicalName)
-            sparkServer.addRoute(httpMethod, createRoute(path, sparkRoute))
-        }
     }
 
-    private fun <T : ResourceController> addRoute(httpMethod: String, path: String, controllerClass: KClass<T>, override: Boolean) {
+    private fun <T : ResourceController> addRoute(httpMethod: String, path: String, controllerClass: KClass<T>) {
         val method = ResourceController::class.java.getMethod(httpMethod, Request::class.java, Response::class.java)
         if (!isBindingPresent(depsContainer!!, controllerClass)) {
             throw IllegalStateException("No provider found for bind<ResourceController>(\"class $controllerClass\"")
@@ -119,15 +118,9 @@ class WebServer(port: Int = Service.SPARK_DEFAULT_PORT) {
             return response.body()
         }
 
-        if (override) {
-            log.info("Replace Spark route .{}(\"{}\", {...}) from controller {}", httpMethod, path, controllerClass.java.canonicalName)
-            // Obliger de passer par un hack (update non dispo)
-            updateRoute(sparkServer, httpMethod, path, sparkRoute)
-
-        } else {
-            log.info("Create Spark route .{}(\"{}\", {...}) from controller {}", httpMethod, path, controllerClass.java.canonicalName)
-            sparkServer.addRoute(httpMethod, createRoute(path, sparkRoute))
-        }
+        val httpVerb = HttpMethod.get(httpMethod)
+        log.info("Declare Spark route .{}(\"{}\", {...}) from controller {}", httpVerb, path, controllerClass.java.canonicalName)
+        sparkServer.addRoute(httpVerb, RouteImpl.create(path, sparkRoute))
     }
 
     private fun <T : ResourceController> isBindingPresent(depsContainer: Kodein, controllerClass: KClass<T>): Boolean {
@@ -142,8 +135,6 @@ class WebServer(port: Int = Service.SPARK_DEFAULT_PORT) {
         this.depsContainer = depsContainer
         return this
     }
-
-
 }
 
 fun isInitializable(port: Int): Boolean {
@@ -157,6 +148,14 @@ fun isInitializable(port: Int): Boolean {
     }
 }
 
+// Ca ne serait plus nécessaire suite à correction https://github.com/perwendel/spark/issues/830
+// Mais ça reste le moyen le plus simple (pour l'instant) de checker la dispo du port AVANT de démarrer un serveur Spark
 fun randomPort(): Int {
     ServerSocket(0).use { s -> return s.localPort }
+}
+
+fun updateRoute2(service: Service, httpMethod: String, path: String, route: (Request, Response) -> Any) {
+    //service.routes.remove(path, httpMethod)
+    service.addRoute(httpMethod, RouteImpl.create(path, route))
+
 }

@@ -64,8 +64,8 @@ class ControllerWithKodeinTest {
             extend(standardBindindRules)
             bind<ResourceController>(ExampleController::class, overrides = true) with singleton { MockExampleController() }
         }
-        // On doit raffaîchir la déclaration de la resource (overrides = true) pour notifier le changement
-        server.withContainer(redefineContainerWithMock).resource(resourcePath, ExampleController::class, override = true)
+        // On doit raffaîchir la déclaration de la resource pour notifier le changement
+        server.withContainer(redefineContainerWithMock).resource(resourcePath, ExampleController::class)
 
         // Test du mock (sur même route que précédemment)
         `when`().get("$baseUrl$resourcePath").then().assertThat().statusCode(200).body(`is`("Je suis le mock qui me moque !"))
@@ -96,7 +96,7 @@ class ControllerWithKodeinTest {
         }
 
         // On doit raffaîchir les routes pour utiliser la redéfinition
-        server.withContainer(redefineContainerWithMock).resource(resourcePath, DIController::class, override = true)
+        server.withContainer(redefineContainerWithMock).resource(resourcePath, DIController::class)
 
         // Test du mock (sur même route que précédemment)
         `when`().get(server.baseUrl + resourcePath).then().assertThat().statusCode(200).body(`is`("Je suis un affreux mock pas beau !"))
